@@ -6,13 +6,9 @@
 
 One real game, two very different clients: in the film below, the tldraw board in this repo plays a friend who is playing normally on [smashandclash.in](https://www.smashandclash.in). Same game, same moves, both screens.
 
-</div>
+[![Smash&Clash on tldraw: watch the film](media/preview.gif)](https://github.com/smashandclash/tldraw/releases/download/v1.0.0/smashandclash-sdk-tldraw.mp4)
 
-https://github.com/user-attachments/assets/f8df20ee-f07e-4897-9893-21b91b595c00
-
-<div align="center">
-
-The film in full quality: **[1080p MP4](https://github.com/smashandclash/tldraw/releases/download/v1.0.0/smashandclash-sdk-tldraw.mp4)** (release download) · [media/smashandclash-sdk-tldraw.mp4](media/smashandclash-sdk-tldraw.mp4)
+**[▶ Watch the 36-second film (1080p MP4)](https://github.com/smashandclash/tldraw/releases/download/v1.0.0/smashandclash-sdk-tldraw.mp4)** · [media/smashandclash-sdk-tldraw.mp4](media/smashandclash-sdk-tldraw.mp4)
 
 **Build your own client today: [docs.smashandclash.in](https://docs.smashandclash.in)**
 
