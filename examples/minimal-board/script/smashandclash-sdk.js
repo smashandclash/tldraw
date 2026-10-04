@@ -1,4 +1,4 @@
-// @smashandclash/sdk 0.2.0, the published npm build (https://www.npmjs.com/package/@smashandclash/sdk),
+// @smashandclash/sdk 0.2.1, the published npm build (https://www.npmjs.com/package/@smashandclash/sdk),
 // bundled with this board so the game runs without a package install. Docs: https://docs.smashandclash.in
 /**
  * @smashandclash/sdk — the official Smash&Clash SDK.
@@ -25,7 +25,7 @@
  * Docs: https://docs.smashandclash.in · API: https://www.smashandclash.in/developers
  */
 export const DEFAULT_BASE_URL = 'https://www.smashandclash.in';
-export const SDK_VERSION = '0.2.0';
+export const SDK_VERSION = '0.2.1';
 /** An API failure: the HTTP status and the problem+json fields. */
 export class SmashAndClashError extends Error {
     constructor(status, code, message, hint) {
@@ -66,7 +66,9 @@ export class Http {
         /** What the last response said about the rate limit. */
         this.rateLimit = null;
         this.baseUrl = (o.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
-        const f = o.fetch ?? globalThis.fetch;
+        // bound: a browser's fetch throws "Illegal invocation" when it is called as a method of another object (this.f)
+        const g = globalThis.fetch;
+        const f = o.fetch ?? (g ? g.bind(globalThis) : undefined);
         if (!f)
             throw new Error('@smashandclash/sdk needs fetch (Node 18+, a browser, Deno or Bun) - or pass options.fetch');
         this.f = f;

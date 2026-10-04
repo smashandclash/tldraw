@@ -8,7 +8,7 @@ The tldraw board is one client. This page is the checklist for building any clie
 npm install @smashandclash/sdk
 ```
 
-There are no dependencies, and it runs anywhere `fetch` does (Node 18+, Deno, Bun, browsers). In a browser with SDK 0.2.0, pass a plain-function `fetch` that drops the `x-sdk` header, as this repo does; newer releases won't need it.
+There are no dependencies, and it runs anywhere `fetch` does (Node 18+, Deno, Bun, browsers). Use 0.2.1 or newer in a browser; 0.2.0 needed a plain-function `fetch` that drops its `x-sdk` header, which this repo's scripts still pass for compatibility.
 
 ## 2. Pick how your player gets a game
 

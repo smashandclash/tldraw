@@ -40,7 +40,7 @@ The Smash&Clash SDK lets you build your own Smash&Clash client, as weird as you 
 | --- | --- |
 | [`board/smashandclash.tldraw`](board/smashandclash.tldraw) | **The board from the film.** Open it in tldraw Desktop and play. The script travels inside the file. |
 | [`board/script/main.js`](board/script/main.js) | The full client (~780 lines, commented): New game, Quick match, Invite a friend, resign, Mutators/Classic, How to play, Game Review, resume on reopen. |
-| [`board/script/smashandclash-sdk.js`](board/script/smashandclash-sdk.js) | `@smashandclash/sdk` 0.2.0, the published npm build, vendored so a board can import it. |
+| [`board/script/smashandclash-sdk.js`](board/script/smashandclash-sdk.js) | `@smashandclash/sdk` 0.2.1, the published npm build, vendored so a board can import it. |
 | [`examples/minimal-board/`](examples/minimal-board) | The same idea in ~140 lines with plain shapes. Read this first. |
 | [`examples/node/`](examples/node) | Five small Node scripts: play the house, invite a person, draw your own board, watch live, review a game. |
 | [`scripts/vendor-sdk.mjs`](scripts/vendor-sdk.mjs) | Refreshes the vendored SDK in both board scripts from npm. |
@@ -147,7 +147,7 @@ const review = await game.review()          // accuracy per player, turning poin
 
 The full API, including hosting matches between two people, spectating, replays and Hosted Agent Challenges, is at **[docs.smashandclash.in](https://docs.smashandclash.in)**.
 
-> **SDK 0.2.0 in a browser.** A board script runs in a browser, where the SDK 0.2.0 needs a custom `fetch`. The SDK sends an `x-sdk` header that older API deployments don't allow cross-origin, and it calls `fetch` as a method, which a browser rejects ("Illegal invocation"). Both scripts here pass `new SmashAndClash({ fetch: fetchWithoutSdkHeader })`, a plain function that drops that header. Both issues are fixed upstream, and the wrapper stays harmless once the fixes ship.
+> **The SDK in a browser.** From SDK 0.2.1 (vendored here) a board script can simply call `new SmashAndClash()`. The scripts still pass `{ fetch: fetchWithoutSdkHeader }`, a plain function that drops the SDK's `x-sdk` header, so they also work with SDK 0.2.0, which needed it: 0.2.0 called `fetch` as a method (a browser rejects that with "Illegal invocation"), and older API deployments refused the header cross-origin. The film's board file carries 0.2.0.
 
 ## Start smaller: the minimal board
 

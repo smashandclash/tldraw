@@ -18,6 +18,6 @@
     "review": "node examples/node/review-a-game.mjs"
   },
   "dependencies": {
-    "@smashandclash/sdk": "^0.2.0"
+    "@smashandclash/sdk": "^0.2.1"
   }
 }

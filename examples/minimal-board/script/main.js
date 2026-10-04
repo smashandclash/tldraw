@@ -10,8 +10,8 @@
 import { createShapeId, toRichText } from 'tldraw'
 import { SmashAndClash } from './smashandclash-sdk.js'
 
-// SDK 0.2.0 in a browser: drop its x-sdk header (older API deployments refuse it cross-origin) and
-// call fetch from a plain function (calling it as a method throws "Illegal invocation").
+// Not needed from SDK 0.2.1 (vendored here); kept so the script also runs with 0.2.0, which needed
+// its x-sdk header dropped and fetch called from a plain function ("Illegal invocation" otherwise).
 const browserFetch = (url, init = {}) => {
 	const headers = { ...init.headers }
 	delete headers['x-sdk']
