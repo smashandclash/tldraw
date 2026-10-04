@@ -6,9 +6,13 @@
 
 One real game, two very different clients: in the film below, the tldraw board in this repo plays a friend who is playing normally on [smashandclash.in](https://www.smashandclash.in). Same game, same moves, both screens.
 
-[![Smash&Clash on tldraw: watch the film](media/preview.gif)](https://github.com/smashandclash/tldraw/releases/download/v1.0.0/smashandclash-sdk-tldraw.mp4)
+</div>
 
-**[▶ Watch the 36-second film (MP4)](https://github.com/smashandclash/tldraw/releases/download/v1.0.0/smashandclash-sdk-tldraw.mp4)** · [media/smashandclash-sdk-tldraw.mp4](media/smashandclash-sdk-tldraw.mp4)
+https://github.com/user-attachments/assets/f8df20ee-f07e-4897-9893-21b91b595c00
+
+<div align="center">
+
+The film in full quality: **[1080p MP4](https://github.com/smashandclash/tldraw/releases/download/v1.0.0/smashandclash-sdk-tldraw.mp4)** (release download) · [media/smashandclash-sdk-tldraw.mp4](media/smashandclash-sdk-tldraw.mp4)
 
 **Build your own client today: [docs.smashandclash.in](https://docs.smashandclash.in)**
 
@@ -183,6 +187,8 @@ After an SDK upgrade, `npm run vendor-sdk` copies the new browser build into bot
 A tldraw board is one surface. The same few calls work for a Discord bot, a terminal UI, a game engine, a physical board with a camera, or something nobody has thought of yet. **[docs/build-your-own-client.md](docs/build-your-own-client.md)** is the checklist: the state you get, move names, drawing the board from either seat (and why a captured card turns round), effects, hops and overruns, waiting, errors and rate limits, and fair play.
 
 ## How the film was made
+
+[![The montage: one game on two screens](media/preview.gif)](https://github.com/smashandclash/tldraw/releases/download/v1.0.0/smashandclash-sdk-tldraw.mp4)
 
 Nothing in the film is staged. One live game was recorded on two screens on a single clock. The tldraw side was captured through tldraw Desktop's local agent API (window screenshots about every 66 ms, with moves made by real canvas pointer events on the board's own controls). The browser side was a headless Chrome screencast of smashandclash.in, which opened the board's invite link and played its seat through the site's own move tool. Both recordings were rebuilt on one timeline, so every move in the montage lands on both screens exactly when it did live. The motion design was built in [HyperFrames](https://hyperframes.heygen.com).
 
