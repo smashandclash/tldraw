@@ -1,0 +1,23 @@
+{
+  "name": "smashandclash-tldraw",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Smash&Clash on a tldraw board: a complete client built with the Smash&Clash SDK, plus smaller SDK examples.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://docs.smashandclash.in",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "vendor-sdk": "node scripts/vendor-sdk.mjs",
+    "play-house": "node examples/node/play-house.mjs",
+    "invite": "node examples/node/invite-a-person.mjs",
+    "draw-board": "node examples/node/draw-your-own-board.mjs",
+    "watch": "node examples/node/watch-live.mjs",
+    "review": "node examples/node/review-a-game.mjs"
+  },
+  "dependencies": {
+    "@smashandclash/sdk": "^0.2.0"
+  }
+}
