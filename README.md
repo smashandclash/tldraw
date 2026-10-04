@@ -8,7 +8,7 @@ One real game, two very different clients: in the film below, the tldraw board i
 
 [![Smash&Clash on tldraw: watch the film](media/preview.gif)](https://github.com/smashandclash/tldraw/releases/download/v1.0.0/smashandclash-sdk-tldraw.mp4)
 
-**[▶ Watch the 36-second film (1080p MP4)](https://github.com/smashandclash/tldraw/releases/download/v1.0.0/smashandclash-sdk-tldraw.mp4)** · [media/smashandclash-sdk-tldraw.mp4](media/smashandclash-sdk-tldraw.mp4)
+**[▶ Watch the 36-second film (1080p MP4)](https://github.com/smashandclash/tldraw/releases/download/v1.0.0/smashandclash-sdk-tldraw.mp4)** · [Portrait cut (9:16)](https://github.com/smashandclash/tldraw/releases/download/v1.0.0/smashandclash-sdk-tldraw-portrait.mp4) · [media/smashandclash-sdk-tldraw.mp4](media/smashandclash-sdk-tldraw.mp4)
 
 **Build your own client today: [docs.smashandclash.in](https://docs.smashandclash.in)**
 
