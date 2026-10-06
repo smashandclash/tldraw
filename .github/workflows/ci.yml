@@ -1,0 +1,25 @@
+name: CI
+
+# Every push and pull request: the boards' vendored SDK is the one package.json pins
+# (npm run vendor-sdk after an upgrade), and every board script and example parses.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: The vendored SDK matches package.json
+        run: |
+          npm run vendor-sdk
+          git diff --exit-code -- board/script/smashandclash-sdk.js examples/minimal-board/script/smashandclash-sdk.js
+      - name: Every script parses
+        run: for f in board/script/*.js examples/minimal-board/script/*.js examples/node/*.mjs scripts/*.mjs; do node --check "$f"; done

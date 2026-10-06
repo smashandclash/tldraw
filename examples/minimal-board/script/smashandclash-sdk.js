@@ -1,4 +1,5 @@
-// @smashandclash/sdk 0.5.0 (MIT) - https://www.npmjs.com/package/@smashandclash/sdk, vendored for this board
+// @smashandclash/sdk 0.5.0, the published npm build (https://www.npmjs.com/package/@smashandclash/sdk),
+// bundled with this board so the game runs without a package install. Docs: https://docs.smashandclash.in
 /**
  * @smashandclash/sdk — the official Smash&Clash SDK.
  *
