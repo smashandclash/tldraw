@@ -56,7 +56,9 @@ You need **tldraw Desktop** (the offline app with board scripts) and an internet
 2. Open it in tldraw Desktop. tldraw says **"This file contains a script"**: choose **Run Script**. It only asks the first time.
 3. Click **New game** in the panel on the right, and play.
 
-To play a person instead, click **Invite a friend**: the board copies an invite link. Your friend opens it in their browser (or in a terminal with `npx smashandclash play <link>`) and you play each other, board vs browser, exactly like the film. **Quick match** pairs you with whoever is online.
+To play a person instead, click **Invite a friend**: the board copies an invite link. Your friend opens it in their browser (or in a terminal with `npx smashandclash play <link>`) and you play each other, board vs browser, exactly like the film.
+
+Since Smash&Clash 2.1.0 the board plays every other client: **Room code** gives a code your friend types into **Play a friend → Join** on smashandclash.in, in its Android, Windows, macOS or Linux app, in Telegram or a terminal; **Join a game** takes their code or link (type it into the green note, or copy it first). **Quick match** pairs you with whoever is online, on any client.
 
 ## Screenshots
 
