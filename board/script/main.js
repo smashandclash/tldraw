@@ -4,7 +4,12 @@
 // How it plays: click a card in your hand, then a green tile. Effects that need a target
 // light their tiles the same way; an effect with no target (Flip!, Swap!) plays when you click
 // it a second time. The panel on the right starts games: New game (an opponent at your level),
-// Quick match (whoever is online) and Invite a friend (they play you in their browser).
+// Quick match (whoever is online), Invite a friend (they play you in their browser), Room code
+// (a code anyone joins with, on any client) and Join a game (a friend's code or link).
+//
+// This board is one client of the Smash&Clash game network: its rooms are joined from
+// smashandclash.in, the terminal or any app, theirs are joined here, and quick match waits in
+// the queue every client shares (https://docs.smashandclash.in/clients).
 //
 // Everything the game draws is ephemeral: it renders here but never lands in the document, so a
 // saved board stays clean and redraws itself on open. The document keeps only the game's record
@@ -18,14 +23,10 @@ const SITE = 'https://www.smashandclash.in'
 const CARD_BACK = `${SITE}/Card_Back_v2.png`
 const LOGO = `${SITE}/Smash%26Clash_Logo.svg`
 
-// The SDK 0.2.0 tags each request with an x-sdk header that older API deployments do not allow
-// cross-origin, and calls fetch unbound ("Illegal invocation" in a browser). This sends the same
-// request without that header, from a plain function. Harmless once both fixes have shipped.
-function fetchWithoutSdkHeader(url, init = {}) {
-	const headers = { ...init.headers }
-	delete headers['x-sdk']
-	return fetch(url, { ...init, headers })
-}
+// Where a friend's code or link goes: an editable note beside the panel (Join a game reads it,
+// or the clipboard when it is empty). It lives in the document, unlike the game's shapes.
+const JOIN_NOTE = createShapeId('snc-join-note')
+const JOIN_HINT = 'Paste a code or link here'
 
 /* ---------------------------------- layout ---------------------------------- */
 
@@ -104,7 +105,8 @@ export default function ({ editor, helpers, signal, app }) {
 	// On a shared board every participant runs this script and plays their own game (it is all
 	// ephemeral); only the board's host writes the record into the document.
 	const isHost = app?.board?.isHost ?? true
-	const sc = new SmashAndClash({ fetch: fetchWithoutSdkHeader })
+	// the SDK names this client on the network: games show the other side where you play from
+	const sc = new SmashAndClash({ client: 'tldraw' })
 	const playerName = (editor.user.getName() || '').trim() || 'tldraw player'
 
 	let disposed = false
@@ -112,7 +114,7 @@ export default function ({ editor, helpers, signal, app }) {
 	let record = { rating: 1200, played: 0, won: 0, ruleset: 'mutators', active: null, ...(editor.getDocumentSettings().meta?.smashandclash ?? {}) }
 
 	let game = null // the SDK Game
-	let mode = null // 'house' | 'quick' | 'invite'
+	let mode = null // 'house' | 'quick' | 'invite' | 'room' | 'friend'
 	let strength = 1200 // the opponent's rating in a house game
 	let inviteUrl = null
 	let busy = null // what we are waiting on, for the status line
@@ -243,12 +245,18 @@ export default function ({ editor, helpers, signal, app }) {
 		task(m === 'house' ? 'Dealing…' : m === 'quick' ? 'Joining the queue…' : 'Opening a game…', async () => {
 			await ensureCards()
 			if (active()) await leave()
-			const opts = { name: playerName, as: 'person', ruleset: record.ruleset }
+			// your rating travels with you: a game between two rated people is rated on both sides
+			const opts = { name: playerName, as: 'person', ruleset: record.ruleset, rating: Math.round(record.rating) }
 			if (m === 'house') {
 				const s = Math.max(800, Math.min(1600, Math.round(record.rating)))
 				adopt(await sc.games.startHouse({ ...opts, strength: s }), m, { strength: s })
 			} else if (m === 'quick') {
 				adopt(await sc.games.quickMatch({ ...opts, opponent: 'any' }), m)
+			} else if (m === 'room') {
+				// a room by code: anyone joins it from any client, with the code or its link
+				const g = await sc.games.createDuel(opts)
+				adopt(g, m, { inviteUrl: g.joinLink })
+				copy(g.joinLink, `Room ${g.code}: its link is copied. Send it to a friend.`)
 			} else {
 				// no opponentName: the friend's own name shows once they open the link
 				const g = await sc.games.createDuel({ ...opts, opponent: 'person' })
@@ -256,6 +264,39 @@ export default function ({ editor, helpers, signal, app }) {
 				copy(g.inviteUrl, 'Invite link copied. Send it to a friend.')
 			}
 		})
+	}
+
+	/** The note's text, without its hint. */
+	function noteText() {
+		const n = editor.getShape(JOIN_NOTE)
+		const t = n ? helpers.richTextToPlainText(n.props.richText).trim() : ''
+		return t === JOIN_HINT ? '' : t
+	}
+
+	/** Join what a friend shared from any client: a code, a join or invite link (a full room: watch it). */
+	function joinGame() {
+		if (active() && !game.waiting && !confirmClick('join', 'Click again to resign this game and join that one.')) return
+		task('Joining…', async () => {
+			let text = noteText()
+			if (!text) text = ((await navigator.clipboard?.readText?.().catch(() => '')) ?? '').trim()
+			if (!text) return say(`Copy your friend's code or link, or type it in the note ("${JOIN_HINT}"), then click Join a game.`, 7000)
+			await ensureCards()
+			if (active()) await leave()
+			const o = await sc.games.open(text, { name: playerName, as: 'person', rating: Math.round(record.rating) })
+			if (o.kind === 'game') {
+				adopt(o.game, 'friend')
+				clearNote()
+			} else if (o.kind === 'watch') {
+				say('That room is full: opening it to watch.', 5000)
+				openLink(o.game.watchPage ?? `${SITE}/watch/${o.game.id}`)
+			} else if (o.kind === 'replay') {
+				openLink(o.link.url)
+			} else say('That is a challenge link: open it in a browser.', 5000)
+		})
+	}
+
+	function clearNote() {
+		if (editor.getShape(JOIN_NOTE)) editor.run(() => editor.updateShapes([{ id: JOIN_NOTE, type: 'note', props: { richText: toRichText(JOIN_HINT) } }]), { history: 'ignore' })
 	}
 
 	function resign() {
@@ -271,7 +312,16 @@ export default function ({ editor, helpers, signal, app }) {
 	// Resign a game in play (it counts as a loss), or call off one nobody joined (back to the lobby).
 	async function leave() {
 		if (game.waiting) {
-			await game.resign().catch(() => {})
+			// never resigns a game that started a moment ago: then it is yours to play
+			const left = await game.leave().then(
+				() => true,
+				(e) => e?.status !== 409,
+			)
+			if (!left) {
+				await game.refresh()
+				afterChange(new Map())
+				return say('Someone joined just now: your game is on.', 5000)
+			}
 			pumpGen++
 			game = null
 			mode = null
@@ -508,10 +558,16 @@ export default function ({ editor, helpers, signal, app }) {
 		if (!game) {
 			return {
 				main: 'Pick a game to start.',
-				detail: 'New game: play now, against an opponent at your level.\nQuick match: whoever is online.\nInvite a friend: they play you in their browser.',
+				detail: 'New game: an opponent at your level. Quick match: whoever is online, on any client.\nInvite a friend: a link for their browser. Room code: a code they join anywhere.\nJoin a game: a friend\'s code or link.',
 			}
 		}
 		if (game.waiting) {
+			if (mode === 'room')
+				return {
+					main: `Room ${game.code ?? ''}`,
+					detail: `They join with the code on smashandclash.in, in a terminal or in any app:\n${inviteUrl ?? ''}`,
+					action: inviteUrl && { label: 'Copy the room link', onClick: () => copy(inviteUrl, 'Room link copied.') },
+				}
 			if (mode === 'invite')
 				return { main: 'Waiting for your friend…', detail: `Send them this link:\n${inviteUrl ?? ''}`, action: inviteUrl && { label: 'Copy invite link', onClick: () => copy(inviteUrl, 'Invite link copied.') } }
 			return { main: 'Looking for an opponent…', detail: 'You are in the quick-match queue. Cancel to leave it.' }
@@ -663,6 +719,8 @@ export default function ({ editor, helpers, signal, app }) {
 		button('new', armedKey === 'start-house' ? confirmLabel : 'New game', () => startGame('house'), { color: 'blue' })
 		button('quick', armedKey === 'start-quick' ? confirmLabel : 'Quick match', () => startGame('quick'))
 		button('invite', armedKey === 'start-invite' ? confirmLabel : 'Invite a friend', () => startGame('invite'))
+		button('room', armedKey === 'start-room' ? confirmLabel : 'Room code', () => startGame('room'))
+		button('join', armedKey === 'join' ? confirmLabel : 'Join a game', joinGame, { color: 'green' })
 		button('resign', game?.waiting ? 'Cancel' : armedKey === 'resign' ? confirmLabel : 'Resign', resign, { disabled: !active(), color: 'red' })
 		button('ruleset', `Rules: ${record.ruleset === 'mutators' ? 'Mutators' : 'Classic'}`, toggleRuleset, { color: 'violet' })
 		button('how', showRules ? 'Hide how to play' : 'How to play', toggleRules)
@@ -755,8 +813,10 @@ export default function ({ editor, helpers, signal, app }) {
 	/* ---------------------------------- start ----------------------------------- */
 
 	clearDrawn()
+	if (!editor.getShape(JOIN_NOTE) && isHost)
+		editor.run(() => editor.createShape({ id: JOIN_NOTE, type: 'note', x: PX + PW + 40, y: HAND_Y, props: { richText: toRichText(JOIN_HINT), color: 'light-green', size: 's' } }), { history: 'ignore' })
 	render()
-	editor.zoomToBounds({ x: BX - 60, y: -10, w: PX + PW + 100, h: HAND_Y + CH + 70 }, { animation: { duration: 300 } })
+	editor.zoomToBounds({ x: BX - 60, y: -10, w: PX + PW + 320, h: HAND_Y + CH + 70 }, { animation: { duration: 300 } })
 
 	task('Shuffling the deck…', async () => {
 		await ensureCards()

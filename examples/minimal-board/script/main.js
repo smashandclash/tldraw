@@ -10,20 +10,14 @@
 import { createShapeId, toRichText } from 'tldraw'
 import { SmashAndClash } from './smashandclash-sdk.js'
 
-// Not needed from SDK 0.2.1 (vendored here); kept so the script also runs with 0.2.0, which needed
-// its x-sdk header dropped and fetch called from a plain function ("Illegal invocation" otherwise).
-const browserFetch = (url, init = {}) => {
-	const headers = { ...init.headers }
-	delete headers['x-sdk']
-	return fetch(url, { ...init, headers })
-}
 
 const TILE = 144
 const COLS = 'ABCDE'
 
 /** @param {import('../.script-workspace/script-context').MainScriptContext} ctx */
 export default function ({ editor, helpers, signal }) {
-	const sc = new SmashAndClash({ fetch: browserFetch })
+	// `client` names this app on the network: games show the other side where you play from
+	const sc = new SmashAndClash({ client: 'tldraw-minimal' })
 	let game = null // the SDK's Game: game.view is what your seat sees
 	let selected = null // the name of the hand card you picked
 	let busy = false

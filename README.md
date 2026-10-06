@@ -40,7 +40,7 @@ The Smash&Clash SDK lets you build your own Smash&Clash client, as weird as you 
 | --- | --- |
 | [`board/smashandclash.tldraw`](board/smashandclash.tldraw) | **The board from the film.** Open it in tldraw Desktop and play. The script travels inside the file. |
 | [`board/script/main.js`](board/script/main.js) | The full client (~780 lines, commented): New game, Quick match, Invite a friend, resign, Mutators/Classic, How to play, Game Review, resume on reopen. |
-| [`board/script/smashandclash-sdk.js`](board/script/smashandclash-sdk.js) | `@smashandclash/sdk` 0.2.1, the published npm build, vendored so a board can import it. |
+| [`board/script/smashandclash-sdk.js`](board/script/smashandclash-sdk.js) | `@smashandclash/sdk` 0.5.0, the published npm build, vendored so a board can import it. |
 | [`examples/minimal-board/`](examples/minimal-board) | The same idea in ~140 lines with plain shapes. Read this first. |
 | [`examples/node/`](examples/node) | Five small Node scripts: play the house, invite a person, draw your own board, watch live, review a game. |
 | [`scripts/vendor-sdk.mjs`](scripts/vendor-sdk.mjs) | Refreshes the vendored SDK in both board scripts from npm. |
@@ -77,6 +77,12 @@ Smash&Clash is a two-player game on a 3×5 board. Each player holds 5 cards and 
 - **Effects** (Boulder!, Flip!, Freeze!, Recruit!, Swap!) play when they can do something.
 - **Mutators** (the default rules) add chess tiles (hop like a knight, bishop, rook or queen), power tiles (+1/+2 for a colour) and overrun zones.
 
+**Play anyone, on any client.** The board is one client of the Smash&Clash game network, like smashandclash.in, the terminal or Telegram ([one game, every client](https://docs.smashandclash.in/clients)):
+
+- **Quick match** waits in the queue every client shares, so you can be paired with someone on the website.
+- **Room code** makes a room and copies its link. Your friend joins with the code on smashandclash.in (**Play a friend → Join**), in a terminal (`npx smashandclash open CODE`) or in any app.
+- **Join a game** joins a friend's room from any client: type their code or link into the green note beside the panel (or just copy it), then click the button. A room that's already full opens to watch.
+
 On the board: **click a card, then a green tile.** An effect that needs a target lights its tiles the same way (Recruit! takes two tile clicks: the card to take, then where it goes); an effect with no target (Flip!, Swap!) plays when you click it a second time or press its green button. During a hop, click a green tile or **Stay**. You are always blue and the other side orange, whichever seat you hold. The full rules live at [docs.smashandclash.in](https://docs.smashandclash.in).
 
 ## Put it on any board
@@ -99,7 +105,7 @@ import { AssetRecordType, createShapeId, toRichText } from 'tldraw'
 import { SmashAndClash } from './smashandclash-sdk.js'
 
 export default function ({ editor, helpers, signal, app }) {
-  const sc = new SmashAndClash({ fetch: fetchWithoutSdkHeader })
+  const sc = new SmashAndClash({ client: 'tldraw' })   // games show the other side where you play from
   // state -> scene() -> renderEphemeral(diff) ; clicks -> SDK call -> state
 }
 ```
@@ -125,9 +131,11 @@ Every feature on the board is one or two SDK calls:
 | **New game** (an opponent at your level) | `sc.games.startHouse({ name, as: 'person', ruleset, strength })`, where `strength` is the opponent's rating (800–1600) |
 | **Quick match** | `sc.games.quickMatch({ name, as: 'person', opponent: 'any' })`, then `game.waitForOpponent()` |
 | **Invite a friend** | `sc.games.createDuel({ name, as: 'person', opponent: 'person' })` gives `game.inviteUrl` |
+| **Room code** | `sc.games.createDuel({ name, as: 'person', rating })` gives `game.code` and `game.joinLink`, joined from any client |
+| **Join a game** | `sc.games.open(codeOrLink, { name, as: 'person', rating })`: a seat, or a full room to watch |
 | Play a card | `game.play('Pengu@C2')` (against the house it resolves after the reply) |
 | Wait for the other side | `game.waitForTurn(20)`, a long poll |
-| **Resign / Cancel** | `game.resign()` (on a game nobody joined it calls it off) |
+| **Resign / Cancel** | `game.resign()`; a game nobody joined is left with `game.leave()`, which never resigns one that started a moment before |
 | Card art and names | `sc.cards()`, the 51-card deck with image URLs |
 | **How to play** | `sc.rules()` |
 | Game over: accuracy and replay | `game.review()` and `game.replayUrl` |
@@ -147,7 +155,7 @@ const review = await game.review()          // accuracy per player, turning poin
 
 The full API, including hosting matches between two people, spectating, replays and Hosted Agent Challenges, is at **[docs.smashandclash.in](https://docs.smashandclash.in)**.
 
-> **The SDK in a browser.** From SDK 0.2.1 (vendored here) a board script can simply call `new SmashAndClash()`. The scripts still pass `{ fetch: fetchWithoutSdkHeader }`, a plain function that drops the SDK's `x-sdk` header, so they also work with SDK 0.2.0, which needed it: 0.2.0 called `fetch` as a method (a browser rejects that with "Illegal invocation"), and older API deployments refused the header cross-origin. The film's board file carries 0.2.0.
+> **The SDK in a browser.** A board script simply calls `new SmashAndClash({ client: 'tldraw' })` (SDK 0.2.1 and newer; 0.5.0 is vendored here). The `client` name travels with every request, so games show the other side that you play from tldraw. The film's board file carries SDK 0.2.0, which needed a plain-function `fetch` that dropped its `x-sdk` header.
 
 ## Start smaller: the minimal board
 

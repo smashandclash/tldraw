@@ -16,10 +16,10 @@ A script can import `tldraw` (and `react`) from the app itself, and files that s
 ## 2. The SDK client
 
 ```js
-const sc = new SmashAndClash({ fetch: fetchWithoutSdkHeader })
+const sc = new SmashAndClash({ client: 'tldraw' })
 ```
 
-All game state lives on smashandclash.in; the board holds a `Game` object from the SDK and a player token. The custom `fetch` keeps the script working with SDK 0.2.0 too; from 0.2.1 the SDK needs nothing extra in a browser (see the note in the README).
+All game state lives on smashandclash.in; the board holds a `Game` object from the SDK and a player token. The `client` name tells the network which client each seat plays from; from SDK 0.2.1 the SDK needs nothing else in a browser (see the note in the README).
 
 ## 3. State
 

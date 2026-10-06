@@ -8,7 +8,7 @@ The tldraw board is one client. This page is the checklist for building any clie
 npm install @smashandclash/sdk
 ```
 
-There are no dependencies, and it runs anywhere `fetch` does (Node 18+, Deno, Bun, browsers). Use 0.2.1 or newer in a browser; 0.2.0 needed a plain-function `fetch` that drops its `x-sdk` header, which this repo's scripts still pass for compatibility.
+There are no dependencies, and it runs anywhere `fetch` does (Node 18+, Deno, Bun, browsers). Use 0.2.1 or newer in a browser (0.5.0 is vendored here). From 0.5.0 a client plays every other client: `sc.games.open()` opens a code or a link from any of them, and `createDuel()` gives a code and `game.joinLink` anyone joins with. See [one game, every client](https://docs.smashandclash.in/clients).
 
 ## 2. Pick how your player gets a game
 

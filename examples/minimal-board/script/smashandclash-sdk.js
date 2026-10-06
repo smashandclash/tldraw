@@ -1,5 +1,4 @@
-// @smashandclash/sdk 0.2.1, the published npm build (https://www.npmjs.com/package/@smashandclash/sdk),
-// bundled with this board so the game runs without a package install. Docs: https://docs.smashandclash.in
+// @smashandclash/sdk 0.5.0 (MIT) - https://www.npmjs.com/package/@smashandclash/sdk, vendored for this board
 /**
  * @smashandclash/sdk — the official Smash&Clash SDK.
  *
@@ -9,6 +8,12 @@
  *   - host a match between two people (two invite links) and read the result
  *   - watch any public game live; read finished games as replays and reviews
  *   - send a human a Hosted Agent Challenge (powered by AgentsORG)
+ *   - build your own client: every card's art, colours and attack animation,
+ *     the game's sounds, fonts and brand kit, public player profiles and the
+ *     club / community leaderboards
+ *
+ * The art, audio and characters are Smash&Clash's: free to use in clients and
+ * apps built for Smash&Clash, never to present as your own (see sc.assets()).
  *
  * Fair play: nothing here shows a seat a card it could not see at the table,
  * and replays and reviews open only once a game is over.
@@ -25,7 +30,7 @@
  * Docs: https://docs.smashandclash.in · API: https://www.smashandclash.in/developers
  */
 export const DEFAULT_BASE_URL = 'https://www.smashandclash.in';
-export const SDK_VERSION = '0.2.1';
+export const SDK_VERSION = '0.5.0';
 /** An API failure: the HTTP status and the problem+json fields. */
 export class SmashAndClashError extends Error {
     constructor(status, code, message, hint) {
@@ -35,6 +40,11 @@ export class SmashAndClashError extends Error {
         this.hint = hint;
         this.name = 'SmashAndClashError';
     }
+}
+/** The X-SDK header value: the SDK, then the app that uses it (if named). */
+export function sdkHeader(client) {
+    const app = typeof client === 'string' && /^[\w.+\/-]{1,64}$/.test(client.trim()) ? client.trim() : '';
+    return app ? `smashandclash-sdk/${SDK_VERSION} ${app}` : `smashandclash-sdk/${SDK_VERSION}`;
 }
 /** Parse `RateLimit: "read";r=117;t=42` + `RateLimit-Policy`. */
 export function parseRateLimit(headers) {
@@ -47,6 +57,19 @@ export function parseRateLimit(headers) {
     return { policy, remaining: r ? Number(r[1]) : 0, resetSeconds: t ? Number(t[1]) : 0 };
 }
 const defaultSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/**
+ * A request that failed below HTTP: no response, or one cut off mid-body
+ * (Node: TypeError "fetch failed" / "terminated" with an undici or socket
+ * cause; browsers: TypeError "Failed to fetch", "Load failed", ...).
+ */
+export function isNetworkError(e) {
+    return e instanceof TypeError && !/Illegal invocation/i.test(e.message);
+}
+/** A connection that never opened, so the server never saw the request. */
+function neverSent(e) {
+    const code = e?.cause?.code;
+    return typeof code === 'string' && /^(ECONNREFUSED|ENOTFOUND|EAI_AGAIN|UND_ERR_CONNECT_TIMEOUT)$/.test(code);
+}
 /**
  * The error a failed response stands for: the API's problem+json
  * ({code, error, hint}), a platform error ({error: {code, message}}) or a
@@ -74,26 +97,44 @@ export class Http {
         this.f = f;
         this.retries = o.retries ?? 2;
         this.sleep = o.sleep ?? defaultSleep;
+        this.sdk = sdkHeader(o.client);
     }
+    /**
+     * One API call. A dropped connection is tried again (up to `retries`, after
+     * 0.25 s, then 0.75 s) when repeating it is safe: a GET, a call marked
+     * `repeatable`, or any call whose connection never opened.
+     */
     async request(method, path, o = {}) {
         const url = new URL(this.baseUrl + path);
         for (const [k, v] of Object.entries(o.query ?? {}))
             if (v !== undefined)
                 url.searchParams.set(k, String(v));
-        const headers = { accept: 'application/json', 'x-sdk': `smashandclash-sdk/${SDK_VERSION}` };
+        const headers = { accept: 'application/json', 'x-sdk': this.sdk };
         if (o.body !== undefined)
             headers['content-type'] = 'application/json';
         if (o.token)
             headers.authorization = `Bearer ${o.token}`;
+        const repeatable = method === 'GET' || !!o.repeatable;
         for (let attempt = 0;; attempt++) {
-            const res = await this.f(url.toString(), { method, headers, body: o.body !== undefined ? JSON.stringify(o.body) : undefined });
-            this.rateLimit = parseRateLimit(res.headers) ?? this.rateLimit;
+            let res;
+            let text;
+            try {
+                res = await this.f(url.toString(), { method, headers, body: o.body !== undefined ? JSON.stringify(o.body) : undefined });
+                this.rateLimit = parseRateLimit(res.headers) ?? this.rateLimit;
+                text = res.status === 429 && attempt < this.retries ? '' : await res.text();
+            }
+            catch (err) {
+                if (isNetworkError(err) && attempt < this.retries && (repeatable || neverSent(err))) {
+                    await this.sleep(250 * 3 ** attempt);
+                    continue;
+                }
+                throw err;
+            }
             if (res.status === 429 && attempt < this.retries) {
                 const after = Number(res.headers.get('retry-after') ?? 1);
                 await this.sleep(Math.max(1, Number.isFinite(after) ? after : 1) * 1000);
                 continue;
             }
-            const text = await res.text();
             let data = null;
             try {
                 data = text ? JSON.parse(text) : null;
@@ -159,12 +200,37 @@ export class Game {
     get replayUrl() {
         return this.state.replayUrl;
     }
+    /**
+     * A game waiting for its second player by code: the link to share. Anyone
+     * opens it on any client - smashandclash.in, an app, the CLI
+     * (`smashandclash open <link>`), or yours (`sc.games.open(link)`).
+     */
+    get joinLink() {
+        return this.state.code ? joinLink(this.state.code, this.http.baseUrl) : undefined;
+    }
+    /** The game's live page, for anyone to watch. */
+    get watchLink() {
+        return this.state.watchPage ?? watchLink(this.state.id, this.http.baseUrl);
+    }
     /** Play a move by its name from legalMoves (e.g. "Pengu@C2"). Against the house it has answered when this resolves. */
     async play(move) {
-        this.state = await this.http.request('POST', `/api/v1/games/${encodeURIComponent(this.id)}/moves`, {
-            body: { move },
-            token: this.playerToken,
-        });
+        const before = this.state.moveCount;
+        const send = () => this.http.request('POST', `/api/v1/games/${encodeURIComponent(this.id)}/moves`, { body: { move }, token: this.playerToken });
+        try {
+            this.state = await send();
+        }
+        catch (err) {
+            if (!isNetworkError(err))
+                throw err;
+            // The connection dropped: the move may have landed anyway. Only your
+            // move can add to the count on your turn, so look before sending again.
+            await this.refresh();
+            if (this.state.moveCount > before)
+                return this.state;
+            if (!this.yourTurn)
+                throw err;
+            this.state = await send();
+        }
         return this.state;
     }
     /** Fetch the game again. */
@@ -194,9 +260,44 @@ export class Game {
         }
         return this.state;
     }
+    /**
+     * Leave a game nobody has joined yet - a duel waiting for its code, or a
+     * quick-match ticket - without ever resigning one that has started: when
+     * the other player got in first, this throws a 409 SmashAndClashError and
+     * the game is yours to play (game.refresh()).
+     */
+    async leave() {
+        const send = () => this.http.request('POST', `/api/v1/games/${encodeURIComponent(this.id)}/resign`, { token: this.playerToken, body: { ifWaiting: true } });
+        try {
+            this.state = await send();
+        }
+        catch (err) {
+            if (!isNetworkError(err))
+                throw err;
+            await this.refresh();
+            if (this.over)
+                return this.state;
+            if (!this.waiting)
+                throw new SmashAndClashError(409, 'conflict', 'the game has started', 'Play it: game.refresh() has the board.');
+            this.state = await send();
+        }
+        return this.state;
+    }
     /** Resign (the other side wins), or call off a game nobody joined (and leave the queue). */
     async resign() {
-        this.state = await this.http.request('POST', `/api/v1/games/${encodeURIComponent(this.id)}/resign`, { token: this.playerToken });
+        const send = () => this.http.request('POST', `/api/v1/games/${encodeURIComponent(this.id)}/resign`, { token: this.playerToken });
+        try {
+            this.state = await send();
+        }
+        catch (err) {
+            if (!isNetworkError(err))
+                throw err;
+            // the resignation may have landed: a game that is over needs no second one
+            await this.refresh();
+            if (this.over)
+                return this.state;
+            this.state = await send();
+        }
         return this.state;
     }
     /**
@@ -317,7 +418,11 @@ export class SmashAndClash {
             /** Take the seat an invite link opens (opening it again elsewhere moves the seat). */
             claim: async (inviteUrl, o = {}) => {
                 const { game, invite } = inviteParts(inviteUrl);
-                const r = await this.http.request('POST', `/api/v1/games/${encodeURIComponent(game)}/claim`, { body: { invite, ...o } });
+                const r = await this.http.request('POST', `/api/v1/games/${encodeURIComponent(game)}/claim`, {
+                    body: { invite, ...o },
+                    // opening the invite again moves the seat to the new token: safe to repeat
+                    repeatable: true,
+                });
                 return new Game(this.http, r.game, r.playerToken);
             },
             /** Resume a game you hold the token for. */
@@ -334,6 +439,58 @@ export class SmashAndClash {
             }),
             /** Every change to a game until it ends: `for await (const s of sc.games.spectate(id)) ...` */
             spectate: (id, o = {}) => this.spectateGame(id, o),
+            /**
+             * A spectator's sync, for a client that draws the game (a stream overlay, a
+             * bot): the table now and every move from `since`, each with its public
+             * events - hands only as counts. `wait` (s, max 20) waits for news past `since`.
+             */
+            watchSync: (id, o = {}) => this.http.request('GET', `/api/v1/games/${encodeURIComponent(id)}/sync`, {
+                query: { since: o.since ?? 0, status: o.status, timeout: o.wait ? Math.max(1, Math.min(20, Math.round(o.wait))) : undefined },
+            }),
+            /**
+             * Every move of a game, one at a time, with its public events and the
+             * table after it - to animate or narrate it live:
+             * `for await (const m of sc.games.feed(id)) console.log(m.name, m.events)`.
+             * Starts after the moves already played (`since: 0` replays them first).
+             */
+            feed: (id, o = {}) => this.feedGame(id, o),
+            /** The game to put on a stream now (the public game with the latest move), and the latest finished ones. */
+            featured: () => this.http.request('GET', '/api/v1/games/featured'),
+            /** The game a duel code belongs to, as a spectator sees it (any client's code). */
+            byCode: (code) => this.http.request('GET', `/api/v1/games/code/${encodeURIComponent(code.trim().toUpperCase())}`),
+            /**
+             * Open whatever a player shares from any client - a 6-letter code, a join
+             * link (?join=), an invite link (?game=&invite=), a watch link (/watch/g_…
+             * or a game id), a replay link (/replay#…) or a challenge link (?vs=&ch=) -
+             * the way any mail app opens any address. A code or an invite gives you a
+             * seat (`kind: 'game'`); a code whose game is already full opens it to
+             * watch; the rest are to watch or read. Throws a 400 for anything else.
+             */
+            open: async (input, o = {}) => {
+                const link = parseLink(input);
+                if (!link)
+                    throw new SmashAndClashError(400, 'bad_request', 'That is not a Smash&Clash code or link.', 'Paste a 6-letter code, or a join, invite, watch, replay or challenge link.');
+                switch (link.kind) {
+                    case 'code':
+                        try {
+                            return { kind: 'game', link, game: await this.games.joinDuel(link.code, o) };
+                        }
+                        catch (err) {
+                            // the room is full (or under way): watch it instead
+                            if (err instanceof SmashAndClashError && err.status === 409)
+                                return { kind: 'watch', link, game: await this.games.byCode(link.code) };
+                            throw err;
+                        }
+                    case 'invite':
+                        return { kind: 'game', link, game: await this.games.claim(link.url, o) };
+                    case 'watch':
+                        return { kind: 'watch', link, game: await this.games.watch(link.game) };
+                    case 'replay':
+                        return { kind: 'replay', link, replay: await this.replays.read(link.url) };
+                    case 'challenge':
+                        return { kind: 'challenge', link, challenge: await this.challenges.get(link.token) };
+                }
+            },
             /** Public games: being played now (default) or recently finished. */
             live: async (o = {}) => (await this.http.request('GET', '/api/v1/games/live', { query: o })).games,
             /** Duels waiting for a second player by code. */
@@ -345,8 +502,23 @@ export class SmashAndClash {
         };
         /** Shared replay links (…/replay#z=…), as data. */
         this.replays = {
-            read: (url) => this.http.request('POST', '/api/v1/games/replay', { body: { url } }),
-            review: (url) => this.http.request('POST', '/api/v1/games/review', { body: { url } }),
+            read: (url) => this.http.request('POST', '/api/v1/games/replay', { body: { url }, repeatable: true }),
+            review: (url) => this.http.request('POST', '/api/v1/games/review', { body: { url }, repeatable: true }),
+        };
+        /** Public player profiles. */
+        this.players = {
+            /** A player's public profile and the clubs they rank in (their id is their friend code). */
+            get: (id) => this.http.request('GET', `/api/v1/players/${encodeURIComponent(id)}`),
+        };
+        /** Community leaderboards (clubs, Discord servers, Whop communities). */
+        this.leaderboards = {
+            /** A board by its id: club:<CODE>, discord:<server id> or whop:<experience id>. Best first. */
+            get: (communityId, o = {}) => this.http.request('GET', `/api/v1/leaderboards/${encodeURIComponent(communityId)}`, { query: o }),
+        };
+        /** Clubs (6-character codes). */
+        this.clubs = {
+            /** A club's leaderboard by its code. */
+            get: (code, o = {}) => this.http.request('GET', `/api/v1/clubs/${encodeURIComponent(code)}`, { query: o }),
         };
         /** Hosted Agent Challenges (powered by AgentsORG): a hosted agent plays a human on your behalf. */
         this.challenges = {
@@ -376,6 +548,23 @@ export class SmashAndClash {
     async rules() {
         return (await this.http.request('GET', '/api/v1/games/rules')).rules;
     }
+    async *feedGame(id, o) {
+        const until = Date.now() + (o.timeoutMs ?? 2 * 60 * 60000);
+        let s = await this.games.watchSync(id, { since: o.since ?? 0 });
+        let known = o.since ?? s.moveCount;
+        for (;;) {
+            const { moves, ...game } = s;
+            for (const m of moves) {
+                if (m.index < known)
+                    continue;
+                known = m.index + 1;
+                yield { ...m, game };
+            }
+            if (s.status === 'finished' || s.status === 'abandoned' || Date.now() >= until)
+                return;
+            s = await this.games.watchSync(id, { since: known, status: s.status, wait: 20 });
+        }
+    }
     async *spectateGame(id, o) {
         const until = Date.now() + (o.timeoutMs ?? 2 * 60 * 60000);
         let s = await this.games.watch(id);
@@ -387,10 +576,98 @@ export class SmashAndClash {
             s = next;
         }
     }
-    /** The deck: all 51 cards. */
+    /** The deck: all 51 cards, with each character's art, colours and attack animation. */
     async cards() {
         return (await this.http.request('GET', '/api/v1/games/cards')).cards;
     }
+    /** The game's kit for your own client: brand, fonts, card geometry, palette, animation timing, audio. */
+    assets() {
+        return this.http.request('GET', '/api/v1/games/assets');
+    }
+}
+const CODE_RE = /^[A-Za-z2-9]{6}$/;
+const GAME_ID_RE = /^g_[\w-]{8,40}$/;
+/**
+ * Read what a player pasted: a code, or a link from any client (any host -
+ * the site, a preview, a dev server, Telegram's t.me/…?startapp=w<game>).
+ * Null when it is none of them.
+ */
+export function parseLink(input) {
+    const text = String(input ?? '').trim();
+    if (!text)
+        return null;
+    if (CODE_RE.test(text))
+        return { kind: 'code', code: text.toUpperCase() };
+    if (GAME_ID_RE.test(text))
+        return { kind: 'watch', game: text };
+    let u;
+    try {
+        u = new URL(/^[a-z][\w+.-]*:\/\//i.test(text) ? text : `https://${text}`);
+    }
+    catch {
+        return null;
+    }
+    const q = u.searchParams;
+    const join = q.get('join');
+    if (join && CODE_RE.test(join))
+        return { kind: 'code', code: join.toUpperCase() };
+    const game = q.get('game');
+    const invite = q.get('invite');
+    if (game && invite && GAME_ID_RE.test(game))
+        return { kind: 'invite', game, invite, url: u.toString() };
+    const vs = q.get('vs');
+    const ch = q.get('ch');
+    if (vs && ch)
+        return { kind: 'challenge', agent: vs.toLowerCase(), token: ch };
+    // Telegram's t.me/<bot>?startapp=…: w<game id> to watch, j<n><game><invite> an invite
+    const start = q.get('startapp') ?? q.get('start');
+    if (start && /^w/.test(start) && GAME_ID_RE.test(start.slice(1)))
+        return { kind: 'watch', game: start.slice(1) };
+    const packed = start ? /^j([0-9a-z])([A-Za-z0-9_-]+)$/.exec(start) : null;
+    if (packed) {
+        const n = parseInt(packed[1], 36);
+        const id = `g_${packed[2].slice(0, n)}`;
+        const inv = `inv_${packed[2].slice(n)}`;
+        if (packed[2].length > n && GAME_ID_RE.test(id))
+            return { kind: 'invite', game: id, invite: inv, url: `${DEFAULT_BASE_URL}/?game=${id}&invite=${inv}` };
+    }
+    const path = u.pathname.replace(/\/+$/, '');
+    const watched = /\/(?:watch|api(?:\/v1)?\/games)\/(g_[\w-]{8,40})$/.exec(path);
+    if (watched)
+        return { kind: 'watch', game: watched[1] };
+    if (/\/replay$/.test(path) && u.hash.length > 1)
+        return { kind: 'replay', url: u.toString() };
+    return null;
+}
+/** The link that opens a room by its code on any client (`?join=`). */
+export function joinLink(code, base = DEFAULT_BASE_URL) {
+    return `${base.replace(/\/+$/, '')}/?join=${encodeURIComponent(code.trim().toUpperCase())}`;
+}
+/** A game's live page. */
+export function watchLink(id, base = DEFAULT_BASE_URL) {
+    return `${base.replace(/\/+$/, '')}/watch/${encodeURIComponent(id)}`;
+}
+/* ------------------------------ board helpers ----------------------------- */
+const COLUMNS = 'ABCDE';
+/** "C2" → { r: 1, c: 2 } (the seat-state / sync coordinates); null when it is not a cell. */
+export function cellToRC(cell) {
+    const m = /^([A-Ea-e])([1-3])$/.exec(cell.trim());
+    if (!m)
+        return null;
+    return { r: Number(m[2]) - 1, c: COLUMNS.indexOf(m[1].toUpperCase()) };
+}
+/** { r: 1, c: 2 } → "C2". */
+export function rcToCell(rc) {
+    return `${COLUMNS[rc.c] ?? '?'}${rc.r + 1}`;
+}
+/**
+ * A character's sides on the board, by compass (north = toward row 3).
+ * Seat A reads its card as printed; seat B's card is turned round.
+ */
+export function boardSides(card, owner) {
+    return owner === 'A'
+        ? { north: card.top, east: card.right, south: card.bottom, west: card.left }
+        : { north: card.bottom, east: card.left, south: card.top, west: card.right };
 }
 /* ------------------------------ move helpers ------------------------------ */
 /** A first-cut chooser: the first legal move (deterministic; fine for tests and demos). */
@@ -414,19 +691,21 @@ export function greedyMove(view, seat = 'A') {
         ];
     };
     let best = { move: view.legalMoves[0], gain: -1 };
-    for (const move of view.legalMoves) {
-        const m = /^(.+)@([A-E][1-3])$/.exec(move);
-        if (!m)
-            continue;
-        const card = view.hand.find((h) => h.card === m[1] && h.kind === 'character');
+    // the moves as data when the server sends them; else read the names ("Pengu@C2", "Mr. Nibbles!C2")
+    const places = view.moves?.filter((d) => d.type === 'place' && d.cell).map((d) => ({ move: d.name, cell: d.cell, cardId: d.cardId })) ??
+        view.legalMoves.flatMap((move) => {
+            const m = /^(.+?)(?:#(\d+))?@([A-E][1-3])$/.exec(move);
+            return m ? [{ move, name: m[1], cell: m[3], ...(m[2] ? { cardId: Number(m[2]) } : {}) }] : [];
+        });
+    for (const p of places) {
+        const card = view.hand.find((h) => h.kind === 'character' && (p.cardId !== undefined ? h.cardId === p.cardId : h.card === p.name));
         if (!card || card.kind !== 'character')
             continue;
+        const move = p.move;
         // your card's board-frame sides: seat A reads them as printed, seat B turned round
-        const mine = seat === 'A'
-            ? { north: card.top, east: card.right, south: card.bottom, west: card.left }
-            : { north: card.bottom, east: card.left, south: card.top, west: card.right };
+        const mine = boardSides(card, seat);
         let gain = 0;
-        for (const [t, mySide, theirSide] of neighbours(m[2])) {
+        for (const [t, mySide, theirSide] of neighbours(p.cell)) {
             if (t?.owner === 'opponent' && !t.frozen && t.sides && mine[mySide] >= t.sides[theirSide])
                 gain++;
         }
